@@ -1,0 +1,52 @@
+name: Anchor
+on: 
+  workflow_dispatch:
+    inputs:
+      releaseVersion:
+        description: GitHub Release Version
+        required: true
+        type: string
+      anchorVersion:
+        description: Anchor Version
+        required: false
+        type: string
+        default: 0.25.0
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # needed for doing releases
+      - uses: actions/checkout@v3
+      # setup rust
+      - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        shell: bash
+      - run: echo "/home/runner/.cargo/bin" >> $GITHUB_PATH
+        shell: bash
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # build anchor
+      - run: |
+          sudo apt-get install -y pkg-config build-essential libudev-dev libssl-dev
+          cargo install anchor-cli --version ${{ inputs.anchorVersion }} --locked --force
+      # prepare & upload
+      - run: | 
+          cp ~/.cargo/bin/anchor ./anchor
+          tar -czf anchor.tar.gz anchor
+          md5sum anchor > anchor.md5
+          md5sum anchor.tar.gz > anchor.tar.gz.md5
+          gh release create ${{ inputs.releaseVersion }} \
+            --title anchor-${{ inputs.anchorVersion }} \
+            anchor \
+            anchor.tar.gz \
+            anchor.md5 \
+            anchor.tar.gz.md5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
